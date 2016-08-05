@@ -221,7 +221,12 @@ namespace Ogre
 		Root* root = Root::getSingletonPtr();
 		root->addResourceLocation(data->mInImportPath + data->mInFileDialogBaseName, "FileSystem", "General");
 
-		// 7. Open the .hlmp project file (must be done by the editor)
+		// 7. Copy the thumb images to the ../common/thumbs path
+		//String thumbFileNameSource = data->mInExportPath + baseName + ".png";
+		//String thumbFileNameDestination = "../common/thumbs/" + baseName + ".png";
+		//copyFile(thumbFileNameSource, thumbFileNameDestination);
+
+		// 8. Open the .hlmp project file (must be done by the editor)
 		// The flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
 		data->mOutExportReference = mFileNameProject;
 
@@ -344,6 +349,8 @@ namespace Ogre
 		// 3. Copy all Json (material) files
 		itStart = materials.begin();
 		itEnd = materials.end();
+		String thumbFileNameSource;
+		String thumbFileNameDestination;
 		for (it = itStart; it != itEnd; ++it)
 		{
 			// Load the materials
@@ -359,6 +366,12 @@ namespace Ogre
 			fileNameDestination = data->mInExportPath + baseName;
 			mFileNamesDestination.push_back(fileNameDestination);
 			copyFile(fileName, fileNameDestination);
+
+			// Copy the thumb files
+			thumbFileNameSource = "../common/thumbs/" + baseName + ".png";
+			thumbFileNameDestination = data->mInExportPath + baseName + ".png";
+			mFileNamesDestination.push_back(thumbFileNameDestination);
+			copyFile(thumbFileNameSource, thumbFileNameDestination);
 		}
 
 		// 4. Create project file for export (without paths)
@@ -793,8 +806,11 @@ namespace Ogre
 		int resourceType;
 		String resourceName;
 		String fullQualifiedName;
+		String thumbFileNameSource;
+		String thumbFileNameDestination;
 		while (std::getline(src, line))
 		{
+			// Read
 			std::istringstream iss(line);
 			iss >> topLevelId
 				>> parentId
@@ -803,7 +819,18 @@ namespace Ogre
 				>> resourceName
 				>> fullQualifiedName;
 			if (resourceType == 3)
+			{
+				// Enrich the fullQualifiedName
 				fullQualifiedName = mProjectPath + fullQualifiedName; // Only enrich type = 3 (assets) and not groups
+
+				// Copy the thumb images
+				thumbFileNameSource = mProjectPath + resourceName + ".png";
+				thumbFileNameDestination = "../common/thumbs/" + resourceName + ".png";
+				copyFile(thumbFileNameSource, thumbFileNameDestination);
+				std::remove(thumbFileNameSource.c_str());
+			}
+
+			// Write
 			dst << topLevelId
 				<< "\t"
 				<< parentId
