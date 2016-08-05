@@ -37,8 +37,10 @@ Copyright (c) 2000-2014 Torus Knot Software Ltd
 #include "OgreLogManager.h"
 #include "OgreItem.h"
 #include "zip.h"
+#include "unzip.h"
 #include <iostream>
 #include <fstream>
+
 
 namespace Ogre
 {
@@ -53,6 +55,9 @@ namespace Ogre
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
 #define WRITEBUFFERSIZE (16384)
+
+#define MAX_FILENAME 512
+#define READ_SIZE 8192
 
 	static const String gImportMenuText = "ProjectImportExport: Import HLMS Editor project (from zip)";
 	static const String gExportMenuText = "ProjectImportExport: Export HLMS Editor project (to zip)";
@@ -87,12 +92,12 @@ namespace Ogre
 	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::isOpenFileDialogForImport(void) const
 	{
-		return false;
+		return true;
 	}
 	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::isImport(void) const
 	{
-		return false;
+		return true;
 	}
 	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::isOpenFileDialogForExport(void) const
@@ -143,6 +148,13 @@ namespace Ogre
 		}
 	}
 	//---------------------------------------------------------------------
+	unsigned int ProjectImportExportPlugin::getActionFlag(void)
+	{
+		return PAF_PRE_IMPORT_MK_DIR | 
+			PAF_POST_IMPORT_OPEN_PROJECT | 
+			PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS;
+	}
+	//---------------------------------------------------------------------
 	const String& ProjectImportExportPlugin::getImportMenuText(void) const
 	{
 		return gImportMenuText;
@@ -155,7 +167,64 @@ namespace Ogre
 	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::executeImport(HlmsEditorPluginData* data)
 	{
-		// nothing to do
+		// As a result of the flag PAF_PRE_IMPORT_MK_DIR, the editor is triggered to create a subdir (in a platform independant way)
+
+		// Error in case no materials available
+		if (data->mInFileDialogName.empty())
+		{
+			data->mOutErrorText = "No import file selected";
+			return false;
+		}
+
+		// Determine the destination path where the project files are copied; this is a newly created dir, based on the import (zip) file
+		mProjectPath = data->mInImportPath + data->mInFileDialogBaseName + "/";
+
+		// 1. Copy the zipfile to the target path
+		String sourceZip = data->mInExportPath + data->mInFileDialogName;
+		String baseName = sourceZip.substr(sourceZip.find_last_of("/\\") + 1);
+		String destinationZip = mProjectPath + baseName;
+		copyFile(sourceZip, destinationZip);
+
+		// 1. Unzip the selected file to the created subdir (mProjectPath)
+		char zipFile[1024];
+		strcpy(zipFile, destinationZip.c_str());
+		if (!unzip(zipFile, data))
+			return false;
+
+		// 2 Remove the zip file, because it is not used anymore
+		std::remove(destinationZip.c_str());
+
+		// 3. Create the project file (.hlmp) with the references to the material- and texture cfg files
+		if (!createProjectFileForImport(data))
+		{
+			data->mOutErrorText = "Could not create project file";
+			return false;
+		}
+
+		// 4. Re-create the material cfg file with the mProjectPath
+		if (!createMaterialCfgFileForImport(data))
+		{
+			data->mOutErrorText = "Could not create materials file";
+			return false;
+		}
+
+		// 5. Re-create the texture cfg file with the mProjectPath
+		if (!createTextureCfgFileForImport(data))
+		{
+			data->mOutErrorText = "Could not create textures file";
+			return false;
+		}
+
+		// 6. Add the subdir - containing the upzipped project files - to the Ogre resources (and update resources.cfg)
+		// Note, that mProjectPath cannot be used, because it contains a trailing '/'
+		// The flag PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS triggers the editor to perform the save action (which is already implemented by the editor)
+		Root* root = Root::getSingletonPtr();
+		root->addResourceLocation(data->mInImportPath + data->mInFileDialogBaseName, "FileSystem", "General");
+
+		// 7. Open the .hlmp project file (must be done by the editor)
+		// The flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
+		data->mOutExportReference = mFileNameProject;
+
 		return true;
 	}
 	//---------------------------------------------------------------------
@@ -242,18 +311,13 @@ namespace Ogre
 		for (itFileNamesSource = itFileNamesSourceStart; itFileNamesSource != itFileNamesSourceEnd; ++itFileNamesSource)
 		{
 			fileNameSource = *itFileNamesSource;
-			//std::ifstream src(fileNameSource, std::ios::binary);
 			baseName = fileNameSource.substr(fileNameSource.find_last_of("/\\") + 1);
-			fileNameDestination = data->mInImportExportPath + baseName;
+			fileNameDestination = data->mInExportPath + baseName;
 			if (!isDestinationFileAvailableInVector(fileNameDestination))
 			{
 				mFileNamesDestination.push_back(fileNameDestination); // Only push unique names
 				mUniqueTextureFiles.push_back(baseName);
 			}
-			//std::ofstream dst(fileNameDestination, std::ios::binary);
-			//dst << src.rdbuf();
-			//dst.close();
-			//src.close();
 			copyFile(fileNameSource, fileNameDestination);
 		}
 
@@ -268,21 +332,16 @@ namespace Ogre
 		{
 			fileNameTextureSource = *itTextures;
 			baseNameTexture = fileNameTextureSource.substr(fileNameTextureSource.find_last_of("/\\") + 1);
-			//std::ifstream src(fileNameTextureSource, std::ios::binary);
-			fileNameTextureDestination = data->mInImportExportPath + baseNameTexture;
+			fileNameTextureDestination = data->mInExportPath + baseNameTexture;
 			if (!isDestinationFileAvailableInVector(fileNameTextureDestination))
 			{
 				mFileNamesDestination.push_back(fileNameTextureDestination); // Only push unique names
 				mUniqueTextureFiles.push_back(baseNameTexture);
 			}
-			//std::ofstream dst(fileNameTextureDestination, std::ios::binary);
-			//dst << src.rdbuf();
-			//dst.close();
-			//src.close();
 			copyFile(fileNameTextureSource, fileNameTextureDestination);
 		}
 
-		// 3. Copy all Json (material) files to the export dir
+		// 3. Copy all Json (material) files
 		itStart = materials.begin();
 		itEnd = materials.end();
 		for (it = itStart; it != itEnd; ++it)
@@ -296,29 +355,26 @@ namespace Ogre
 			}
 
 			// Copy the json (material) files
-			//std::ifstream src(fileName, std::ios::binary);
 			baseName = fileName.substr(fileName.find_last_of("/\\") + 1);
-			fileNameDestination = data->mInImportExportPath + baseName;
+			fileNameDestination = data->mInExportPath + baseName;
 			mFileNamesDestination.push_back(fileNameDestination);
-			//std::ofstream dst(fileNameDestination, std::ios::binary);
-			//dst << src.rdbuf();
-			//dst.close();
-			//src.close();
 			copyFile(fileName, fileNameDestination);
 		}
 
-		// 4. Create material config file for export (without paths)
+		// 4. Create project file for export (without paths)
+		createProjectFileForExport(data);
+
+		// 5. Create material config file for export (without paths)
 		// This file does not contain any path info; when the exported project is imported again, the 
 		// material cfg file is enriched with the path of the import directory
 		createMaterialCfgFileForExport(data);
 
-		// 5. Create texture config file for export (without paths)
+		// 6. Create texture config file for export (without paths)
 		// This file does not contain any path info; when the exported project is imported again, the 
 		// texture cfg file is enriched with the path of the import directory
 		createTextureCfgFileForExport(data);
 
-		
-		// Zip all files
+		// 7. Zip all files
 		zipFile zf;
 		int err;
 		int errclose;
@@ -333,7 +389,7 @@ namespace Ogre
 			LogManager::getSingleton().logMessage("ProjectImportExportPlugin: Error allocating memory");
 			return false;
 		}
-		String zipName = data->mInImportExportPath + data->mInProjectName + ".hlmp.zip";
+		String zipName = data->mInExportPath + data->mInProjectName + ".hlmp.zip";
 		char zipFile[1024];
 		char filenameInZip[1024];
 		strcpy(zipFile, zipName.c_str());
@@ -476,7 +532,7 @@ namespace Ogre
 		free(buf);
 		data->mOutSuccessText = "Exported project to " + zipName;
 
-		// Deleting the copied files here, results in a corrupted zip file, so put that as a separate post-export action
+		// 8. Deleting the copied files here results in a corrupted zip file, so put that as a separate post-export action
 		return true;
 	}
 
@@ -563,6 +619,107 @@ namespace Ogre
 	}
 
 	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::unzip (const char* zipfilename, HlmsEditorPluginData* data)
+	{
+		// Open the zip file
+		unzFile zipfile;
+		zipfile = unzOpen(zipfilename);
+		if (zipfile == NULL)
+		{
+			data->mOutErrorText = "Error while opening import file";
+			return false;
+		}
+
+		// Get info about the zip file
+		unz_global_info global_info;
+		if (unzGetGlobalInfo(zipfile, &global_info) != UNZ_OK)
+		{
+			data->mOutErrorText = "Error while readinf import file";
+			unzClose(zipfile);
+			return false;
+		}
+
+		// Buffer to hold data read from the zip file.
+		char read_buffer[READ_SIZE];
+
+		// Loop to extract all files
+		uLong i;
+		for (i = 0; i < global_info.number_entry; ++i)
+		{
+			// Get info about current file.
+			unz_file_info file_info;
+			char filename[MAX_FILENAME];
+			if (unzGetCurrentFileInfo(
+				zipfile,
+				&file_info,
+				filename,
+				MAX_FILENAME,
+				NULL, 0, NULL, 0) != UNZ_OK)
+			{
+				data->mOutErrorText = "Error while reading info file";
+				unzClose(zipfile);
+				return false;
+			}
+
+			// Entry is always a file, so extract it.
+			if (unzOpenCurrentFile(zipfile) != UNZ_OK)
+			{
+				data->mOutErrorText = "Could not open a file in the import";
+				unzClose(zipfile);
+				return false;
+			}
+
+			// Open a file to write out the data.
+			String f(filename);
+			f = mProjectPath + f;
+			FILE *out = fopen(f.c_str(), "wb");
+			if (out == NULL)
+			{
+				data->mOutErrorText = "Could not create a destination file";
+				unzCloseCurrentFile(zipfile);
+				unzClose(zipfile);
+				return false;
+			}
+
+			int error = UNZ_OK;
+			do
+			{
+				error = unzReadCurrentFile(zipfile, read_buffer, READ_SIZE);
+				if (error < 0)
+				{
+					data->mOutErrorText = "Error while creating file";
+					unzCloseCurrentFile(zipfile);
+					unzClose(zipfile);
+					return false;
+				}
+
+				// Write data to file.
+				if (error > 0)
+				{
+					fwrite(read_buffer, error, 1, out); // You should check return of fwrite...
+				}
+			} while (error > 0);
+
+			fclose(out);
+			unzCloseCurrentFile(zipfile);
+
+			// Go the the next entry listed in the zip file.
+			if ((i + 1) < global_info.number_entry)
+			{
+				if (unzGoToNextFile(zipfile) != UNZ_OK)
+				{
+					data->mOutErrorText = "Could not read next file in import";
+					unzClose(zipfile);
+					return false;
+				}
+			}
+		}
+
+		unzClose(zipfile);
+		return true;
+	}
+
+	//---------------------------------------------------------------------
 	int ProjectImportExportPlugin::isLargeFile(const char* filename)
 	{
 		int largeFile = 0;
@@ -574,7 +731,7 @@ namespace Ogre
 			int n = FSEEKO_FUNC(pFile, 0, SEEK_END);
 			pos = FTELLO_FUNC(pFile);
 
-			printf("File : %s is %lld bytes\n", filename, pos);
+			//printf("File : %s is %lld bytes\n", filename, pos);
 
 			if (pos >= 0xffffffff)
 				largeFile = 1;
@@ -586,31 +743,152 @@ namespace Ogre
 	}
 
 	//---------------------------------------------------------------------
-	/*
-	void ProjectImportExportPlugin::createProjectFile(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::createProjectFileForImport(HlmsEditorPluginData* data)
 	{
-		String fileNameProject = data->mInImportExportPath + data->mInProjectName + ".hlmp";
-		String fileNameMaterials = data->mInMaterialFileName;
-		String baseNameMaterials = fileNameMaterials.substr(fileNameMaterials.find_last_of("/\\") + 1);
-		fileNameMaterials = data->mInImportExportPath + baseNameMaterials;
-		String fileNameTextures = data->mInTextureFileName;
-		String baseNameTextures = fileNameTextures.substr(fileNameTextures.find_last_of("/\\") + 1);
-		fileNameTextures = data->mInImportExportPath + baseNameTextures;
+		// File projects.txt must exist
+		String fileName = mProjectPath + "project.txt";
+		std::ifstream src(fileName);
+		if (!src)
+			return false;
 
-		// Write to file
-		std::ofstream file(fileNameProject);
-		file << "hlmsEditor v1.0\n";
-		file << fileNameMaterials
+		// Get the project name
+		mNameProject = "";
+		std::getline (src, mNameProject);
+
+		// Write the project file
+		mFileNameProject = mProjectPath + mNameProject + ".hlmp";
+		mFileNameMaterials = mProjectPath + mNameProject + "_materials.cfg";
+		mFileNameTextures = mProjectPath + mNameProject + "_textures.cfg";
+		std::ofstream dst(mFileNameProject);
+		dst << "hlmsEditor v1.0\n";
+		dst << mFileNameMaterials
 			<< "\n";
-		file << fileNameTextures
+		dst << mFileNameTextures
 			<< "\n";
-		file.close();
-		mFileNamesDestination.push_back(fileNameProject);
+
+		src.close();
+		dst.close();
+
+		// Remove the project.txt, because it is not used anymore
+		std::remove(fileName.c_str());
+
+		return true;
 	}
-	*/
 
 	//---------------------------------------------------------------------
-	void ProjectImportExportPlugin::createMaterialCfgFileForExport(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::createMaterialCfgFileForImport(HlmsEditorPluginData* data)
+	{
+		// File materials.cfg must exist
+		String materialsName = mProjectPath + "materials.cfg";
+		std::ifstream src(materialsName);
+		if (!src)
+			return false;
+
+		// Read materials.cfg and create <project>_materials.cfg, including path
+		std::ofstream dst(mFileNameMaterials);
+		std::string line;
+		int topLevelId;
+		int parentId;
+		int resourceId;
+		int resourceType;
+		String resourceName;
+		String fullQualifiedName;
+		while (std::getline(src, line))
+		{
+			std::istringstream iss(line);
+			iss >> topLevelId
+				>> parentId
+				>> resourceId
+				>> resourceType
+				>> resourceName
+				>> fullQualifiedName;
+			if (resourceType == 3)
+				fullQualifiedName = mProjectPath + fullQualifiedName; // Only enrich type = 3 (assets) and not groups
+			dst << topLevelId
+				<< "\t"
+				<< parentId
+				<< "\t"
+				<< resourceId
+				<< "\t"
+				<< resourceType
+				<< "\t"
+				<< resourceName
+				<< "\t"
+				<< fullQualifiedName
+				<< "\n";
+		}
+		src.close();
+		dst.close();
+
+		// Remove the materials.txt, because it is not used anymore
+		std::remove(materialsName.c_str());
+		return true;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::createTextureCfgFileForImport(HlmsEditorPluginData* data)
+	{
+		// File textures.cfg must exist
+		String texturesName = mProjectPath + "textures.cfg";
+		std::ifstream src(texturesName);
+		if (!src)
+			return false;
+
+		// Read materials.cfg and create <project>_materials.cfg, including path
+		std::ofstream dst(mFileNameTextures);
+		std::string line;
+		int topLevelId;
+		int parentId;
+		int resourceId;
+		int resourceType;
+		String resourceName;
+		String fullQualifiedName;
+		while (std::getline(src, line))
+		{
+			std::istringstream iss(line);
+			iss >> topLevelId
+				>> parentId
+				>> resourceId
+				>> resourceType
+				>> resourceName
+				>> fullQualifiedName;
+			if (resourceType == 3)
+				fullQualifiedName = mProjectPath + fullQualifiedName; // Only enrich type = 3 (assets) and not groups
+			dst << topLevelId
+				<< "\t"
+				<< parentId
+				<< "\t"
+				<< resourceId
+				<< "\t"
+				<< resourceType
+				<< "\t"
+				<< resourceName
+				<< "\t"
+				<< fullQualifiedName
+				<< "\n";
+		}
+		src.close();
+		dst.close();
+
+		// Remove the textures.txt, because it is not used anymore
+		std::remove(texturesName.c_str());
+		return true;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::createProjectFileForExport(HlmsEditorPluginData* data)
+	{
+		// Add a project.txt to the zip, containing the projectname
+		String fileName = data->mInExportPath + "project.txt";
+		std::ofstream file(fileName);
+		file << data->mInProjectName;
+		mFileNamesDestination.push_back(fileName);
+		file.close();
+		return true;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::createMaterialCfgFileForExport(HlmsEditorPluginData* data)
 	{
 		/*
 		Create the material cfg file with all material files (in Jsonformat).
@@ -623,7 +901,7 @@ namespace Ogre
 		String fileNameMaterialSource = data->mInMaterialFileName;
 		std::ifstream src(fileNameMaterialSource);
 		String baseNameMaterial = fileNameMaterialSource.substr(fileNameMaterialSource.find_last_of("/\\") + 1);
-		String fileNameMaterialDestination = data->mInImportExportPath + baseNameMaterial;
+		String fileNameMaterialDestination = data->mInExportPath + "materials.cfg";
 		std::ofstream dst(fileNameMaterialDestination);
 		String topLevelId;
 		String parentId;
@@ -656,10 +934,11 @@ namespace Ogre
 		src.close();
 		dst.close();
 		mFileNamesDestination.push_back(fileNameMaterialDestination);
+		return true;
 	}
 
 	//---------------------------------------------------------------------
-	void ProjectImportExportPlugin::createTextureCfgFileForExport(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::createTextureCfgFileForExport(HlmsEditorPluginData* data)
 	{
 		/*
 		Create the texture cfg file with all unique textures. This concerns both the texture from the texture browser, but also the 
@@ -673,7 +952,7 @@ namespace Ogre
 		String fileNameTextureSource = data->mInTextureFileName;
 		std::ifstream src(fileNameTextureSource);
 		String baseNameTexture = fileNameTextureSource.substr(fileNameTextureSource.find_last_of("/\\") + 1);
-		String fileNameTextureDestination = data->mInImportExportPath + baseNameTexture;
+		String fileNameTextureDestination = data->mInExportPath + "textures.cfg";
 		std::ofstream dst(fileNameTextureDestination);
 		int topLevelId;
 		int parentId;
@@ -746,6 +1025,7 @@ namespace Ogre
 
 		dst.close();
 		mFileNamesDestination.push_back(fileNameTextureDestination);
+		return true;
 	}
 
 	//---------------------------------------------------------------------
