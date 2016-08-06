@@ -54,13 +54,14 @@ namespace Ogre
 #define FTELLO_FUNC(stream) ftello64(stream)
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
-#define WRITEBUFFERSIZE (16384)
+//#define WRITEBUFFERSIZE (32768)
+#define WRITEBUFFERSIZE (65536)
 
 #define MAX_FILENAME 512
 #define READ_SIZE 8192
 
-	static const String gImportMenuText = "HLMS Editor project (from zip)";
-	static const String gExportMenuText = "Current project (to zip)";
+	static const String gImportMenuText = "HLMS Editor project from zip";
+	static const String gExportMenuText = "Current project to zip";
 	static String gTempString = "";
 	//---------------------------------------------------------------------
 	ProjectImportExportPlugin::ProjectImportExportPlugin()
@@ -237,12 +238,7 @@ namespace Ogre
 		mFileNamesDestination.clear();
 		mUniqueTextureFiles.clear();
 
-		// Error in case no materials available
-		if (data->mInMaterialFileNameVector.size() == 0)
-		{
-			data->mOutSuccessText = "Nothing to export";
-			return true;
-		}
+		// Do not quit when data->mInTexturesUsedByDatablocks and/or data->mInMaterialFileNameVector is empty!!
 
 		// 1. Copy texture files from the material (Json) files
 		// This is needed in case the texture is not available in the texture browser; the exported zip file
@@ -275,11 +271,6 @@ namespace Ogre
 
 		// Retrieve all the texturenames from the loaded datablocks
 		std::vector<String> v = data->mInTexturesUsedByDatablocks;
-		if (data->mInTexturesUsedByDatablocks.size() == 0)
-		{
-			data->mOutErrorText = "No textures to export";
-			return false;
-		}
 
 		// vector v only contains basenames; Get the full qualified name instead
 		std::vector<String>::iterator itBaseNames;
