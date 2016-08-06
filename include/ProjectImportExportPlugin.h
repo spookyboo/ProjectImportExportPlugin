@@ -76,6 +76,7 @@ namespace Ogre
 			bool loadMaterial(const String& fileName);
 			const String& getFullFileNameFromTextureList(const String& baseName, HlmsEditorPluginData* data);
 			const String& getFullFileNameFromResources(const String& baseName, HlmsEditorPluginData* data);
+			bool validateZip(const char* zipfilename, HlmsEditorPluginData* data);
 			bool unzip(const char* filename, HlmsEditorPluginData* data);
 			int isLargeFile(const char* filename);
 			bool createProjectFileForImport(HlmsEditorPluginData* data);

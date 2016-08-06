@@ -185,46 +185,45 @@ namespace Ogre
 		String destinationZip = mProjectPath + baseName;
 		copyFile(sourceZip, destinationZip);
 
-		// 1. Unzip the selected file to the created subdir (mProjectPath)
+		// 1. Validate the selected project export file
 		char zipFile[1024];
 		strcpy(zipFile, destinationZip.c_str());
+		if (!validateZip(zipFile, data))
+			return false;
+
+		// 2. Unzip the selected file to the created subdir (mProjectPath)
 		if (!unzip(zipFile, data))
 			return false;
 
-		// 2 Remove the zip file, because it is not used anymore
+		// 3 Remove the zip file, because it is not used anymore
 		std::remove(destinationZip.c_str());
 
-		// 3. Create the project file (.hlmp) with the references to the material- and texture cfg files
+		// 4. Create the project file (.hlmp) with the references to the material- and texture cfg files
 		if (!createProjectFileForImport(data))
 		{
 			data->mOutErrorText = "Could not create project file";
 			return false;
 		}
 
-		// 4. Re-create the material cfg file with the mProjectPath
+		// 5. Re-create the material cfg file with the mProjectPath
 		if (!createMaterialCfgFileForImport(data))
 		{
 			data->mOutErrorText = "Could not create materials file";
 			return false;
 		}
 
-		// 5. Re-create the texture cfg file with the mProjectPath
+		// 6. Re-create the texture cfg file with the mProjectPath
 		if (!createTextureCfgFileForImport(data))
 		{
 			data->mOutErrorText = "Could not create textures file";
 			return false;
 		}
 
-		// 6. Add the subdir - containing the upzipped project files - to the Ogre resources (and update resources.cfg)
+		// 7. Add the subdir - containing the upzipped project files - to the Ogre resources (and update resources.cfg)
 		// Note, that mProjectPath cannot be used, because it contains a trailing '/'
 		// The flag PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS triggers the editor to perform the save action (which is already implemented by the editor)
 		Root* root = Root::getSingletonPtr();
 		root->addResourceLocation(data->mInImportPath + data->mInFileDialogBaseName, "FileSystem", "General");
-
-		// 7. Copy the thumb images to the ../common/thumbs path
-		//String thumbFileNameSource = data->mInExportPath + baseName + ".png";
-		//String thumbFileNameDestination = "../common/thumbs/" + baseName + ".png";
-		//copyFile(thumbFileNameSource, thumbFileNameDestination);
 
 		// 8. Open the .hlmp project file (must be done by the editor)
 		// The flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
@@ -730,6 +729,83 @@ namespace Ogre
 
 		unzClose(zipfile);
 		return true;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::validateZip(const char* zipfilename, HlmsEditorPluginData* data)
+	{
+		// Check whether the zip file is a valid HLMS Editor project export
+		// This means that at least the files 'project.txt', 'materials.cfg' and 'textures.cfg'
+		// must be present
+		bool projectPresent = false;
+		bool materialsPresent = false;
+		bool texturesPresent = false;
+
+		// Open the zip file
+		unzFile zipfile;
+		zipfile = unzOpen(zipfilename);
+		if (zipfile == NULL)
+		{
+			data->mOutErrorText = "Error while opening import file";
+			return false;
+		}
+
+		// Get info about the zip file
+		unz_global_info global_info;
+		if (unzGetGlobalInfo(zipfile, &global_info) != UNZ_OK)
+		{
+			data->mOutErrorText = "Error while readinf import file";
+			unzClose(zipfile);
+			return false;
+		}
+
+		// Loop to extract all files
+		uLong i;
+		for (i = 0; i < global_info.number_entry; ++i)
+		{
+			// Get info about current file.
+			unz_file_info file_info;
+			char filename[MAX_FILENAME];
+			if (unzGetCurrentFileInfo(
+				zipfile,
+				&file_info,
+				filename,
+				MAX_FILENAME,
+				NULL, 0, NULL, 0) != UNZ_OK)
+			{
+				data->mOutErrorText = "Error while reading info file";
+				unzClose(zipfile);
+				return false;
+			}
+
+			// Check the name
+			String f(filename);
+			if (Ogre::StringUtil::match(f, "project.txt"))
+				projectPresent = true;
+			if (Ogre::StringUtil::match(f, "materials.cfg"))
+				materialsPresent = true;
+			if (Ogre::StringUtil::match(f, "textures.cfg"))
+				texturesPresent = true;
+
+			// Go the the next entry listed in the zip file.
+			if ((i + 1) < global_info.number_entry)
+			{
+				if (unzGoToNextFile(zipfile) != UNZ_OK)
+				{
+					data->mOutErrorText = "Could not read next file in import";
+					unzClose(zipfile);
+					return false;
+				}
+			}
+		}
+
+		unzClose(zipfile);
+
+		if (projectPresent && materialsPresent && texturesPresent)
+			return true;
+
+		data->mOutErrorText = "File is not a valid project export";
+		return false;
 	}
 
 	//---------------------------------------------------------------------
