@@ -54,11 +54,10 @@ namespace Ogre
 #define FTELLO_FUNC(stream) ftello64(stream)
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
-//#define WRITEBUFFERSIZE (32768)
-#define WRITEBUFFERSIZE (65536)
 
+#define WRITEBUFFERSIZE (131072)
 #define MAX_FILENAME 512
-#define READ_SIZE 8192
+#define READ_SIZE 16384
 
 	static const String gImportMenuText = "HLMS Editor project from zip";
 	static const String gExportMenuText = "Current project to zip";
@@ -1092,6 +1091,7 @@ namespace Ogre
 		std::vector<String>::iterator itTexEnd = mUniqueTextureFiles.end();
 		String fileName;
 		resourceId = maxResourceId;
+		resourceType = 3; // It must be an asset
 		while (itTex != itTexEnd)
 		{
 			fileName = *itTex;
@@ -1102,7 +1102,7 @@ namespace Ogre
 				resourceId++;
 				dst << topLevelId
 					<< "\t"
-					<< parentId
+					<< topLevelId
 					<< "\t"
 					<< resourceId
 					<< "\t"
@@ -1168,6 +1168,9 @@ namespace Ogre
 	//---------------------------------------------------------------------
 	void ProjectImportExportPlugin::copyFile(const String& fileNameSource, const String& fileNameDestination)
 	{
+		if (Ogre::StringUtil::match(fileNameSource, fileNameDestination))
+			return;
+
 		std::ifstream src(fileNameSource, std::ios::binary);
 		std::ofstream dst(fileNameDestination, std::ios::binary);
 		dst << src.rdbuf();
