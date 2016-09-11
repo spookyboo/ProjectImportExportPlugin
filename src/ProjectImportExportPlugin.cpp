@@ -55,9 +55,9 @@ namespace Ogre
 #define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
 #endif
 
-#define WRITEBUFFERSIZE (131072)
+#define WRITEBUFFERSIZE (262144)
 #define MAX_FILENAME 512
-#define READ_SIZE 16384
+#define READ_SIZE 32768
 
 	static const String gImportMenuText = "HLMS Editor project from zip";
 	static const String gExportMenuText = "Current project to zip";
