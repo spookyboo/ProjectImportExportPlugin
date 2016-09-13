@@ -90,22 +90,7 @@ namespace Ogre
 	{
 	}
 	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::isOpenFileDialogForImport(void) const
-	{
-		return true;
-	}
-	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::isImport(void) const
-	{
-		return true;
-	}
-	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::isOpenFileDialogForExport(void) const
-	{
-		return true;
-	}
-	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::isTexturesUsedByDatablocksForExport(void) const
 	{
 		return true;
 	}
@@ -150,9 +135,19 @@ namespace Ogre
 	//---------------------------------------------------------------------
 	unsigned int ProjectImportExportPlugin::getActionFlag(void)
 	{
-		return PAF_PRE_IMPORT_MK_DIR | 
+		// 1. Open a file dialog to selected the imported file
+		// 2. Create the project directory
+		// 3. Open a project file after import
+		// 4. Save resource locations after import
+
+		// 5. Open a dialog to directory were the exported files are saved
+		// 6. The HLMS Editor passes all texture filenames used by the datablocks in the material browser to the plugin
+		return PAF_PRE_IMPORT_OPEN_FILE_DIALOG | 
+			PAF_PRE_IMPORT_MK_DIR |
 			PAF_POST_IMPORT_OPEN_PROJECT | 
-			PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS;
+			PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS |
+			PAF_PRE_EXPORT_OPEN_DIR_DIALOG |
+			PAF_PRE_EXPORT_TEXTURES_USED_BY_DATABLOCK;
 	}
 	//---------------------------------------------------------------------
 	const String& ProjectImportExportPlugin::getImportMenuText(void) const
@@ -227,7 +222,7 @@ namespace Ogre
 
 		// 8. Open the .hlmp project file (must be done by the editor)
 		// The flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
-		data->mOutExportReference = mFileNameProject;
+		data->mOutReference = mFileNameProject;
 
 		return true;
 	}

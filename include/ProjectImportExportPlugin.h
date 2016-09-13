@@ -57,9 +57,6 @@ namespace Ogre
 			void uninstall();
 
 			// Implement HlmsEditorPlugin functions
-			virtual bool isOpenFileDialogForImport(void) const;
-			virtual bool isOpenFileDialogForExport(void) const;
-			virtual bool isTexturesUsedByDatablocksForExport(void) const;
 			virtual bool isImport (void) const;
 			virtual bool isExport (void) const;
 			virtual const String& getImportMenuText (void) const;
