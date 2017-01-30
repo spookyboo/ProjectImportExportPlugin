@@ -41,23 +41,22 @@ Copyright (c) 2000-2014 Torus Knot Software Ltd
 #include <iostream>
 #include <fstream>
 
-
 namespace Ogre
 {
-#ifdef __APPLE__
-	// In darwin and perhaps other BSD variants off_t is a 64 bit value, hence no need for specific 64 bit functions
-#define FOPEN_FUNC(filename, mode) fopen(filename, mode)
-#define FTELLO_FUNC(stream) ftello(stream)
-#define FSEEKO_FUNC(stream, offset, origin) fseeko(stream, offset, origin)
-#else
-#define FOPEN_FUNC(filename, mode) fopen64(filename, mode)
-#define FTELLO_FUNC(stream) ftello64(stream)
-#define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
-#endif
+	#ifdef __APPLE__
+		// In darwin and perhaps other BSD variants off_t is a 64 bit value, hence no need for specific 64 bit functions
+		#define FOPEN_FUNC(filename, mode) fopen(filename, mode)
+		#define FTELLO_FUNC(stream) ftello(stream)
+		#define FSEEKO_FUNC(stream, offset, origin) fseeko(stream, offset, origin)
+	#else
+		#define FOPEN_FUNC(filename, mode) fopen64(filename, mode)
+		#define FTELLO_FUNC(stream) ftello64(stream)
+		#define FSEEKO_FUNC(stream, offset, origin) fseeko64(stream, offset, origin)
+	#endif
 
-#define WRITEBUFFERSIZE (262144)
-#define MAX_FILENAME 512
-#define READ_SIZE 32768
+	#define WRITEBUFFERSIZE (262144)
+	#define MAX_FILENAME 512
+	#define READ_SIZE 32768
 
 	static const String gImportMenuText = "HLMS Editor project from zip";
 	static const String gExportMenuText = "Current project to zip";
@@ -182,6 +181,7 @@ namespace Ogre
 
 		// 1. Validate the selected project export file
 		char zipFile[1024];
+		memset(zipFile, 0, sizeof(char)*1024);
 		strcpy(zipFile, destinationZip.c_str());
 		if (!validateZip(zipFile, data))
 			return false;
@@ -388,16 +388,19 @@ namespace Ogre
 		}
 		String zipName = data->mInExportPath + data->mInProjectName + ".hlmp.zip";
 		char zipFile[1024];
+		memset(zipFile, 0, sizeof(char) * 1024);
 		char filenameInZip[1024];
+		memset(filenameInZip, 0, sizeof(char) * 1024);
 		strcpy(zipFile, zipName.c_str());
 
-#ifdef USEWIN32IOAPI
-		zlib_filefunc64_def ffunc;
-		fill_win32_filefunc64A(&ffunc);
-		zf = zipOpen2_64(zipFile, 0, NULL, &ffunc);
-#else
+//#ifdef USEWIN32IOAPI
+		//zlib_filefunc64_def ffunc;
+		//fill_win32_filefunc64A(&ffunc);
+		//zf = zipOpen2_64(zipFile, 0, NULL, &ffunc);
+//#else
+		//zf = zipOpen(zipFile, 0);
 		zf = zipOpen64(zipFile, 0);
-#endif
+//#endif
 
 		if (zf == NULL)
 		{
@@ -622,10 +625,11 @@ namespace Ogre
 	{
 		// Open the zip file
 		unzFile zipfile;
-		zipfile = unzOpen(zipfilename);
+		//zipfile = unzOpen(zipfilename);
+		zipfile = unzOpen64(zipfilename);
 		if (zipfile == NULL)
 		{
-			data->mOutErrorText = "Error while opening import file";
+			data->mOutErrorText = "Error while opening import file: " + data->mInExportPath + data->mInFileDialogName;
 			return false;
 		}
 
@@ -730,10 +734,11 @@ namespace Ogre
 
 		// Open the zip file
 		unzFile zipfile;
-		zipfile = unzOpen(zipfilename);
+		//zipfile = unzOpen(zipfilename);
+		zipfile = unzOpen64(zipfilename);
 		if (zipfile == NULL)
 		{
-			data->mOutErrorText = "Error while opening import file";
+			data->mOutErrorText = "Error while opening import file: " + data->mInExportPath + data->mInFileDialogName;
 			return false;
 		}
 
@@ -1168,11 +1173,12 @@ namespace Ogre
 		if (Ogre::StringUtil::match(fileNameSource, fileNameDestination))
 			return;
 
-		std::ifstream src(fileNameSource, std::ios::binary);
-		std::ofstream dst(fileNameDestination, std::ios::binary);
+		std::ifstream src(fileNameSource.c_str(), std::ios::binary);
+		std::ofstream dst(fileNameDestination.c_str(), std::ios::binary);
 		dst << src.rdbuf();
 		dst.close();
 		src.close();
+		LogManager::getSingleton().logMessage("Copied files: " + fileNameSource + " to " + fileNameDestination);
 	}
 
 	//---------------------------------------------------------------------
