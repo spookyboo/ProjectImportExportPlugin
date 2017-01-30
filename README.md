@@ -6,5 +6,5 @@ change the properties to the correct include files, because it makes use of both
 The __Project Import Export Plugin__ makes use of the generic plugin mechanism of Ogre3D.
 
 **Installation:**  
-Just add the plugin entry _Plugin=ProjectImportExport_ to the plugins.cfg file (under HLMSEditor/bin); the HLMS Editor recognizes whether it is a valid plugin.
+Just add the plugin entry _Plugin=ProjectImportExport_ to the plugins.cfg file (under HLMSEditor/bin); the HLMS Editor recognizes whether it is a valid plugin.  
 Important note: The plugin only works when you create directory __HLMSEditor/import__. This directory contains all imported projects.
