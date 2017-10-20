@@ -58,8 +58,8 @@ namespace Ogre
 	#define MAX_FILENAME 512
 	#define READ_SIZE 32768
 
-	static const String gImportMenuText = "HLMS Editor project from zip";
-	static const String gExportMenuText = "Current project to zip";
+	static const String gImportMenuText = "Import HLMS Editor project";
+	static const String gExportMenuText = "Export current HLMS Editor project";
 	static String gTempString = "";
 	//---------------------------------------------------------------------
 	ProjectImportExportPlugin::ProjectImportExportPlugin()
