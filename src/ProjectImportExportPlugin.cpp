@@ -64,6 +64,7 @@ namespace Ogre
 	//---------------------------------------------------------------------
 	ProjectImportExportPlugin::ProjectImportExportPlugin()
 	{
+		mProperties.clear();
 	}
 	//---------------------------------------------------------------------
 	const String& ProjectImportExportPlugin::getName() const
@@ -136,17 +137,32 @@ namespace Ogre
 	{
 		// 1. Open a file dialog to selected the imported file
 		// 2. Create the project directory
-		// 3. Open a project file after import
-		// 4. Save resource locations after import
-
-		// 5. Open a dialog to directory were the exported files are saved
-		// 6. The HLMS Editor passes all texture filenames used by the datablocks in the material browser to the plugin
+		// 3. Open a settings dialog
+		// 4. Open a project file after import
+		// 5. Save resource locations after import
+		// 6. Open a dialog to directory were the exported files are saved
+		// 7. The HLMS Editor passes all texture filenames used by the datablocks in the material browser to the plugin
 		return PAF_PRE_IMPORT_OPEN_FILE_DIALOG | 
 			PAF_PRE_IMPORT_MK_DIR |
+			PAF_PRE_EXPORT_SETTINGS_DIALOG |
 			PAF_POST_IMPORT_OPEN_PROJECT | 
 			PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS |
 			PAF_PRE_EXPORT_OPEN_DIR_DIALOG |
 			PAF_PRE_EXPORT_TEXTURES_USED_BY_DATABLOCK;
+	}
+	//---------------------------------------------------------------------
+	std::map<std::string, HlmsEditorPluginData::PLUGIN_PROPERTY> ProjectImportExportPlugin::getProperties(void)
+	{
+		// Include mesh files
+		HlmsEditorPluginData::PLUGIN_PROPERTY property;
+		property.propertyName = "include_meshes";
+		property.labelName = "Add current mesh file to the project";
+		property.info = "By default, mesh files are not part of a HLMS material project. If this property is set to 'true' the current mesh is included in the zip.\n";
+		property.type = HlmsEditorPluginData::BOOL;
+		property.boolValue = false;
+		mProperties[property.propertyName] = property;
+
+		return mProperties;
 	}
 	//---------------------------------------------------------------------
 	const String& ProjectImportExportPlugin::getImportMenuText(void) const
@@ -371,7 +387,39 @@ namespace Ogre
 		// texture cfg file is enriched with the path of the import directory
 		createTextureCfgFileForExport(data);
 
-		// 7. Zip all files
+		// 7. (Optional) copy current meshes to the export
+		std::map<std::string, Ogre::HlmsEditorPluginData::PLUGIN_PROPERTY> properties = data->mInPropertiesMap;
+		std::map<std::string, Ogre::HlmsEditorPluginData::PLUGIN_PROPERTY>::iterator itProperties = properties.find("include_meshes");
+		if (itProperties != properties.end())
+		{
+			// Property found; determine its value
+			if ((itProperties->second).boolValue)
+			{
+				if (data->mInMeshFileNames.size() > 0)
+				{
+					std::vector<String> meshes;
+					meshes = data->mInMeshFileNames;
+					std::vector<String>::iterator itMeshes;
+					std::vector<String>::iterator itStartMeshes = meshes.begin();
+					std::vector<String>::iterator itEndMeshes = meshes.end();
+					for (itMeshes = itStartMeshes; itMeshes != itEndMeshes; ++itMeshes)
+					{
+						// Get the filename of the meshes
+						fileName = *itMeshes;
+						if (!fileName.empty())
+						{
+							// Copy the meshs file(s)
+							baseName = fileName.substr(fileName.find_last_of("/\\") + 1);
+							fileNameDestination = data->mInExportPath + baseName;
+							mFileNamesDestination.push_back(fileNameDestination);
+							copyFile(fileName, fileNameDestination);
+						}
+					}
+				}
+			}
+		}
+
+		// 8. Zip all files
 		zipFile zf;
 		int err;
 		int errclose;
