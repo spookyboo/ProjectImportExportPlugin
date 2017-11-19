@@ -71,22 +71,25 @@ namespace Ogre
 			virtual std::map<std::string, HlmsEditorPluginData::PLUGIN_PROPERTY> getProperties(void);
 
 		protected:
-			bool loadMaterial(const String& fileName);
-			const String& getFullFileNameFromTextureList(const String& baseName, HlmsEditorPluginData* data);
-			const String& getFullFileNameFromResources(const String& baseName, HlmsEditorPluginData* data);
-			bool validateZip(const char* zipfilename, HlmsEditorPluginData* data);
-			bool unzip(const char* filename, HlmsEditorPluginData* data);
+			bool loadMaterial (const String& fileName);
+			const String& getFullFileNameFromTextureList (const String& baseName, HlmsEditorPluginData* data);
+			const String& getFullFileNameFromResources (const String& baseName, HlmsEditorPluginData* data);
+			bool validateZip (const char* zipfilename, HlmsEditorPluginData* data);
+			bool unzip (const char* filename, HlmsEditorPluginData* data);
 			int isLargeFile(const char* filename);
-			bool createProjectFileForImport(HlmsEditorPluginData* data);
-			bool createProjectFileForExport(HlmsEditorPluginData* data);
-			bool createMaterialCfgFileForImport(HlmsEditorPluginData* data); // Used to create a material file WITH paths in the file
-			bool createMaterialCfgFileForExport(HlmsEditorPluginData* data); // Used to create a base material file without paths in the file
-			bool createTextureCfgFileForImport(HlmsEditorPluginData* data); // Used to create a texture file WITH paths in the file
-			bool createTextureCfgFileForExport(HlmsEditorPluginData* data); // Used to create a base texture file without paths in the file
+			bool createProjectFileForImport (HlmsEditorPluginData* data);
+			bool createProjectFileForExport (HlmsEditorPluginData* data);
+			bool createMaterialCfgFileForImport (HlmsEditorPluginData* data); // Used to create a material file WITH paths in the file
+			bool createMaterialCfgFileForExport (HlmsEditorPluginData* data); // Used to create a base material file without paths in the file
+			bool createTextureCfgFileForImport (HlmsEditorPluginData* data); // Used to create a texture file WITH paths in the file
+			bool createTextureCfgFileForExport (HlmsEditorPluginData* data); // Used to create a base texture file without paths in the file
+			bool isMeshesCfgFileForImport (HlmsEditorPluginData* data); // Returns true if there is a meshes.cfg in the .zip file
+			bool createMeshesCfgFileForImport (HlmsEditorPluginData* data); // Used to create an optional meshes file WITH paths in the file
+			bool createMeshesCfgFileForExport (HlmsEditorPluginData* data); // Used to create a base meshes file without paths in the file
 			void removeFromUniqueTextureFiles(const String& fileName);
 			bool isDestinationFileAvailableInVector (const String& fileName);
-			void copyFile(const String& fileNameSource, const String& fileNameDestination);
-			void mySleep(clock_t sec);
+			void copyFile (const String& fileNameSource, const String& fileNameDestination);
+			void mySleep (clock_t sec);
 
 		private:
 			std::vector<String> mFileNamesDestination;
@@ -96,6 +99,7 @@ namespace Ogre
 			String mFileNameProject;
 			String mFileNameMaterials;
 			String mFileNameTextures;
+			String mFileNameMeshes;
 			std::map<std::string, HlmsEditorPluginData::PLUGIN_PROPERTY> mProperties;
 
 	};

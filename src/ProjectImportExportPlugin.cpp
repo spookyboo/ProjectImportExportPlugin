@@ -160,7 +160,7 @@ namespace Ogre
 		HlmsEditorPluginData::PLUGIN_PROPERTY property;
 		property.propertyName = "include_meshes";
 		property.labelName = "Add current mesh file to the project";
-		property.info = "By default, mesh files are not part of a HLMS material project. If this property is set to 'true' the current mesh is included in the zip.\n";
+		property.info = "If this property is set to 'true' the current mesh is included in the zip.\n";
 		property.type = HlmsEditorPluginData::BOOL;
 		property.boolValue = false;
 		mProperties[property.propertyName] = property;
@@ -233,20 +233,23 @@ namespace Ogre
 			return false;
 		}
 
-		// 7. Add the subdir - containing the upzipped project files - to the Ogre resources (and update resources.cfg)
+		// 7. Re-create the meshes cfg file with the mProjectPath if the file exists
+		createMeshesCfgFileForImport(data);
+
+		// 8. Add the subdir - containing the upzipped project files - to the Ogre resources (and update resources.cfg)
 		// Note, that mProjectPath cannot be used, because it contains a trailing '/'
 		// The flag PAF_POST_IMPORT_SAVE_RESOURCE_LOCATIONS triggers the editor to perform the save action (which is already implemented by the editor)
 		Root* root = Root::getSingletonPtr();
 		root->addResourceLocation(data->mInImportPath + data->mInFileDialogBaseName, "FileSystem", "General");
 
-		// 8. Open the .hlmp project file (must be done by the editor)
-		// The flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
+		// 9. Open the .hlmp project file (must be done by the editor)
+		// he flag PAF_POST_IMPORT_OPEN_PROJECT triggers the editor to perform the 'load project' action
 		data->mOutReference = mFileNameProject;
 
 		return true;
 	}
 	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::executeExport(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::executeExport (HlmsEditorPluginData* data)
 	{
 		mFileNamesDestination.clear();
 		mUniqueTextureFiles.clear();
@@ -402,6 +405,7 @@ namespace Ogre
 			{
 				if (data->mInMeshFileNames.size() > 0)
 				{
+					// Copy meshes
 					std::vector<String> meshes;
 					meshes = data->mInMeshFileNames;
 					std::vector<String>::iterator itMeshes;
@@ -421,11 +425,16 @@ namespace Ogre
 							copyFile(fileNameMeshSource, fileNameDestination);
 						}
 					}
+					
+					// 8. Create meshes config file for export (without paths)
+					// This file does not contain any path info; when the exported project is imported again, the 
+					// texture cfg file is enriched with the path of the import directory
+					createMeshesCfgFileForExport(data);
 				}
 			}
 		}
 
-		// 8. Zip all files
+		// 9. Zip all files
 		zipFile zf;
 		int err;
 		int errclose;
@@ -586,7 +595,8 @@ namespace Ogre
 		free(buf);
 		data->mOutSuccessText = "Exported project to " + zipName;
 
-		// 8. Deleting the copied files here results in a corrupted zip file, so put that as a separate post-export action
+		// Remark: Deleting the copied files here results in a corrupted zip file, so put that as a separate post-export action
+
 		return true;
 	}
 
@@ -878,7 +888,7 @@ namespace Ogre
 	}
 
 	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::createProjectFileForImport(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::createProjectFileForImport (HlmsEditorPluginData* data)
 	{
 		// File projects.txt must exist
 		String fileName = mProjectPath + "project.txt";
@@ -894,12 +904,20 @@ namespace Ogre
 		mFileNameProject = mProjectPath + mNameProject + ".hlmp";
 		mFileNameMaterials = mProjectPath + mNameProject + "_materials.cfg";
 		mFileNameTextures = mProjectPath + mNameProject + "_textures.cfg";
+		mFileNameMeshes = mProjectPath + mNameProject + "_meshes.cfg";
 		std::ofstream dst(mFileNameProject);
 		dst << "hlmsEditor v1.0\n";
 		dst << mFileNameMaterials
 			<< "\n";
 		dst << mFileNameTextures
 			<< "\n";
+
+		// Only write the entry when the meshes.cfg is available in the .zip file
+		if (isMeshesCfgFileForImport(data))
+		{
+			dst << mFileNameMeshes
+				<< "\n";
+		}
 
 		src.close();
 		dst.close();
@@ -1025,9 +1043,48 @@ namespace Ogre
 	}
 
 	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::isMeshesCfgFileForImport (HlmsEditorPluginData* data)
+	{
+		bool result = false;
+		String meshesName = mProjectPath + "meshes.cfg";
+		std::ifstream src(meshesName);
+		if (src)
+			result = true;
+
+		src.close();
+		return result;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::createMeshesCfgFileForImport (HlmsEditorPluginData* data)
+	{
+		// File meshes.cfg is optional
+		String meshesName = mProjectPath + "meshes.cfg";
+		std::ifstream src(meshesName);
+		if (!src)
+			return true; // Always return true, because it is optional
+
+		// Read meshes.cfg and create <project>_meshes.cfg, including path
+		std::ofstream dst(mFileNameMeshes);
+		std::string line;
+		while (std::getline(src, line))
+		{
+			line = mProjectPath + line;
+			dst << line;
+		}
+		src.close();
+		dst.close();
+
+		// Remove the meshes.txt, because it is not used anymore
+		std::remove(meshesName.c_str());
+		return true;
+	}
+
+	//---------------------------------------------------------------------
 	bool ProjectImportExportPlugin::createProjectFileForExport(HlmsEditorPluginData* data)
 	{
 		// Add a project.txt to the zip, containing the projectname
+		// This is only to set the name of the project. This name is used later when the .zip file is imported again
 		String fileName = data->mInExportPath + "project.txt";
 		std::ofstream file(fileName);
 		file << data->mInProjectName;
@@ -1087,7 +1144,7 @@ namespace Ogre
 	}
 
 	//---------------------------------------------------------------------
-	bool ProjectImportExportPlugin::createTextureCfgFileForExport(HlmsEditorPluginData* data)
+	bool ProjectImportExportPlugin::createTextureCfgFileForExport (HlmsEditorPluginData* data)
 	{
 		/*
 		Create the texture cfg file with all unique textures. This concerns both the texture from the texture browser, but also the 
@@ -1175,6 +1232,38 @@ namespace Ogre
 
 		dst.close();
 		mFileNamesDestination.push_back(fileNameTextureDestination);
+		return true;
+	}
+
+	//---------------------------------------------------------------------
+	bool ProjectImportExportPlugin::createMeshesCfgFileForExport (HlmsEditorPluginData* data)
+	{
+		// Create the meshes cfg file with all unique meshes. For nowm this is just one mesh
+		String fileNameMeshesSource = data->mInMeshesFileName;
+		String baseNameMeshes = fileNameMeshesSource.substr(fileNameMeshesSource.find_last_of("/\\") + 1);
+		String fileNameMeshesDestination = data->mInExportPath + "meshes.cfg";
+		std::ofstream dst(fileNameMeshesDestination);
+
+		std::vector<String> meshes;
+		meshes = data->mInMeshFileNames;
+		std::vector<String>::iterator itMeshes;
+		std::vector<String>::iterator itStartMeshes = meshes.begin();
+		std::vector<String>::iterator itEndMeshes = meshes.end();
+		String fileNameMesh;
+		String baseName;
+		for (itMeshes = itStartMeshes; itMeshes != itEndMeshes; ++itMeshes)
+		{
+			// Get the filename of the meshes
+			fileNameMesh = *itMeshes;
+			if (!fileNameMesh.empty())
+			{
+				baseName = fileNameMesh.substr(fileNameMesh.find_last_of("/\\") + 1);
+				dst << baseName << "\n";
+			}
+		}
+
+		dst.close();
+		mFileNamesDestination.push_back(fileNameMeshesDestination);
 		return true;
 	}
 
