@@ -1157,7 +1157,7 @@ namespace Ogre
 		std::vector<String>::iterator itEnd = textures.end();
 		String fileNameTextureSource = data->mInTextureFileName;
 		std::ifstream src(fileNameTextureSource);
-		String baseNameTexture = fileNameTextureSource.substr(fileNameTextureSource.find_last_of("/\\") + 1);
+		String baseNameTexture;
 		String fileNameTextureDestination = data->mInExportPath + "textures.cfg";
 		std::ofstream dst(fileNameTextureDestination);
 		int topLevelId;
@@ -1180,6 +1180,8 @@ namespace Ogre
 			if (resourceId > maxResourceId)
 				maxResourceId = resourceId;
 
+			// Strip the path from the resource
+			baseNameTexture = resourceName.substr(resourceName.find_last_of("/\\") + 1);
 			dst << topLevelId
 				<< "\t"
 				<< parentId
@@ -1188,10 +1190,11 @@ namespace Ogre
 				<< "\t"
 				<< resourceType
 				<< "\t"
-				<< resourceName
+				<< baseNameTexture
 				<< "\t"
 				<< resourceName
 				<< "\n";
+
 			removeFromUniqueTextureFiles(resourceName);
 		}
 		src.close();
@@ -1281,7 +1284,8 @@ namespace Ogre
 			Ogre::StringUtil::toUpperCase(destFileName);
 			if (Ogre::StringUtil::match(compareFileName, destFileName))
 			{
-				mUniqueTextureFiles.erase(itDest);
+				itDest = mUniqueTextureFiles.erase(itDest);
+				itDestEnd = mUniqueTextureFiles.end();
 				return;
 			}
 
@@ -1321,7 +1325,7 @@ namespace Ogre
 		dst << src.rdbuf();
 		dst.close();
 		src.close();
-		LogManager::getSingleton().logMessage("Copied files: " + fileNameSource + " to " + fileNameDestination);
+		//LogManager::getSingleton().logMessage("Copied files: " + fileNameSource + " to " + fileNameDestination);
 	}
 
 	//---------------------------------------------------------------------
