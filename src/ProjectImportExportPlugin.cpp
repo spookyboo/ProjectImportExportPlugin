@@ -1192,10 +1192,10 @@ namespace Ogre
 				<< "\t"
 				<< baseNameTexture
 				<< "\t"
-				<< resourceName
+				<< baseNameTexture
 				<< "\n";
 
-			removeFromUniqueTextureFiles(resourceName);
+			removeFromUniqueTextureFiles(baseNameTexture);
 		}
 		src.close();
 
